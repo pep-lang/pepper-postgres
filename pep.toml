@@ -1,6 +1,6 @@
 [package]
 name = "postgres"
-version = "1.0.0"
+version = "1.0.1"
 description = "An async PostgreSQL client: wire protocol v3 in pure Pepper, TLS, SCRAM-SHA-256, parameterized queries, typed rows, transactions, LISTEN/NOTIFY and a pool"
 license = "Apache-2.0"
 repository = "https://github.com/pep-lang/pepper-postgres"
