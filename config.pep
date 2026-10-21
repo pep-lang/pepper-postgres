@@ -2,6 +2,9 @@
 
 import "error";
 
+# `Config.max_notifications` unless it is set.
+const _DEFAULT_MAX_NOTIFICATIONS: ulong = 10000;
+
 ## The settings of a connection: the server, the login, the database, and
 ## whether to use TLS.
 ##
@@ -31,6 +34,11 @@ export struct Config {
     ## A PEM file of a further root certificate to trust, such as a
     ## private CA's.
     var root_certificate: String?;
+    ## The most notifications a connection keeps until `notifications()` or
+    ## `wait_for_notification()` takes them: 10,000 by default, and at
+    ## least 1. Past it the oldest is dropped, and counted in
+    ## `Connection.dropped_notifications()`.
+    var max_notifications: ulong;
 
     ## Creates a config for `localhost:5432` without TLS.
     ##
@@ -44,6 +52,7 @@ export struct Config {
         database = "";
         tls = false;
         root_certificate = Optional<String>.Empty;
+        max_notifications = _DEFAULT_MAX_NOTIFICATIONS;
     }
 
     ## Parses a connection URL,

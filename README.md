@@ -11,9 +11,11 @@ One module, **`postgres`**:
 - **`Connection`**: `connect` (a `Config` or a `postgres://` URL), `query`,
   `query_as<T>`, `execute`, `execute_script`, `prepare`, `begin` /
   `commit` / `rollback`, `transaction`, and LISTEN/NOTIFY with
-  `wait_for_notification`.
-- **`Config`**: host, port, user, password, database, TLS; `Config.parse`
-  reads a connection URL.
+  `wait_for_notification` and `notifications`. A connection keeps at most
+  `max_notifications` waiting (10,000 by default); past that it drops the
+  oldest and counts them in `dropped_notifications()`.
+- **`Config`**: host, port, user, password, database, TLS,
+  `max_notifications`; `Config.parse` reads a connection URL.
 - **`Row`** and **`Value`**: typed rows (`boolean`, integers, floats,
   `bytea`, `NULL`; other types as text), and `Row.read<T>` to decode a row
   into a struct.
