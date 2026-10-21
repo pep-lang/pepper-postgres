@@ -9,7 +9,7 @@ pepper="${1:-pepper}"
 build="$(mktemp -d)"
 trap 'rm -rf "$build"' EXIT
 
-# The package is the module `mypkg`: a folder of that name on the import path.
+# The package is the module `postgres`: a folder of that name on the import path.
 mkdir "$build/packages"
-ln -s "$root" "$build/packages/mypkg"
+ln -s "$root" "$build/packages/postgres"
 "$pepper" test -I "$build/packages" "$root/tests"
