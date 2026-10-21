@@ -93,6 +93,8 @@ _sasl_name(user: String): String {
 }
 
 # PBKDF2 (RFC 8018) with HMAC-SHA-256, one 32-byte block: SCRAM's Hi().
+# shortcut: a private copy until the runtime's digest has pbkdf2_sha256
+# (pep-lang/pepper#69); switch to it then.
 _pbkdf2_sha256(password: String, salt: u8[], rounds: ulong): u8[] {
     var mac = digest.Hmac<digest.Sha256>(password);
     var block = salt.copy();
