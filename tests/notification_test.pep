@@ -38,11 +38,13 @@ a_full_queue_drops_the_oldest_notifications() {
     config.max_notifications = 3;
     var connection = postgres.Connection.connect(config).value();
     expect_equal(connection.dropped_notifications(), 2 as ulong);
+    # The oldest kept is waiting, so this returns it without reading.
+    expect_equal(connection.wait_for_notification().value().payload, "3");
     var kept = connection.notifications();
-    expect_equal(kept.count, 3 as ulong);
-    expect_equal(kept[0].payload, "3");
-    expect_equal(kept[2].payload, "5");
-    expect_equal(kept[2].channel, "events");
+    expect_equal(kept.count, 2 as ulong);
+    expect_equal(kept[0].payload, "4");
+    expect_equal(kept[1].payload, "5");
+    expect_equal(kept[1].channel, "events");
     expect_equal(connection.notifications().count, 0 as ulong);
     connection.close();
     server.join();

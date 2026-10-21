@@ -427,10 +427,7 @@ export struct Connection {
     ##
     ## @returns the notifications, possibly none
     notifications(): Notification[] {
-        var arrived = Array<Notification>();
-        for (var notification in _notifications) {
-            arrived.append(notification);
-        }
+        var arrived = _notifications.iterate().to_array();
         _notifications.clear();
         return arrived;
     }
