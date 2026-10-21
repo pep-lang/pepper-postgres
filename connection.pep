@@ -42,11 +42,14 @@ struct _Outcome {
     var columns: _Column[];
     var rows: Row[];
     var affected: ulong;
+    # Whether the extended protocol ran it, so an error waits for a Sync.
+    var extended: bool;
 
-    construct() {
+    construct(extended: bool = false) {
         columns = Array<_Column>();
         rows = Array<Row>();
         affected = 0;
+        this.extended = extended;
     }
 }
 
@@ -183,6 +186,10 @@ export struct Connection {
         parameters.append(("client_encoding", "UTF8"));
         _write(_startup_message(parameters))?;
         var scram = _Scram(config.user, config.password, _scram_nonce());
+        # Once SCRAM starts, the server must prove it knows the password
+        # (SASLFinal) before AuthenticationOk counts.
+        var scram_started = false;
+        var scram_verified = false;
         while (true) {
             var message = _receive()?;
             if (message.type_byte == 'E') {
@@ -198,7 +205,9 @@ export struct Connection {
             var fields = _Fields(message.body);
             var kind = fields.int32();
             if (kind == 0) {
-                continue;  # AuthenticationOk
+                if (scram_started && !scram_verified) {
+                    return PgResult<void>.err(_auth_error("the server did not complete SCRAM authentication"));
+                }
             } else if (kind == 3) {
                 _write(_password_message(config.password))?;
             } else if (kind == 10) {
@@ -213,12 +222,14 @@ export struct Connection {
                 if (!offered) {
                     return PgResult<void>.err(_auth_error("the server offers no SASL mechanism this client supports"));
                 }
+                scram_started = true;
                 _write(_sasl_initial_response("SCRAM-SHA-256", scram.first()))?;
             } else if (kind == 11) {
                 var answer = scram.final(text.Utf8.decode_lossy(fields.rest()))?;
                 _write(_sasl_response(answer))?;
             } else if (kind == 12) {
                 scram.verify(text.Utf8.decode_lossy(fields.rest()))?;
+                scram_verified = true;
             } else if (kind == 5) {
                 return PgResult<void>.err(
                     _auth_error("the server asks for MD5 authentication, which is not supported; use scram-sha-256")
@@ -404,7 +415,9 @@ export struct Connection {
     ## Returns the notifications that have arrived, oldest first, and
     ## forgets them. They arrive while the connection reads from the
     ## server, so this returns those that came with earlier queries;
-    ## `wait_for_notification` waits for one.
+    ## `wait_for_notification` waits for one. A connection that listens
+    ## keeps every notification until this is called, so call it often, or
+    ## `UNLISTEN *` when done.
     ##
     ## @returns the notifications, possibly none
     notifications(): Notification[] {
@@ -435,7 +448,7 @@ export struct Connection {
         out.append_all(_execute_message());
         out.append_all(_sync_message());
         _write(out)?;
-        var outcome = _Outcome();
+        var outcome = _Outcome(true);
         _finish(outcome)?;
         return PgResult<_Outcome>.ok(outcome);
     }
@@ -445,7 +458,7 @@ export struct Connection {
         out.append_all(_execute_message());
         out.append_all(_sync_message());
         _write(out)?;
-        var outcome = _Outcome();
+        var outcome = _Outcome(true);
         outcome.columns = columns;
         _finish(outcome)?;
         return PgResult<_Outcome>.ok(outcome);
@@ -476,12 +489,32 @@ export struct Connection {
                     error = Optional<PgError>.Value(_error_of(message.body));
                 }
             } else if (type_byte == 'T') {
-                var columns = _columns_of(message.body)?;
-                outcome.columns = columns;
-                names = _names_of(columns);
+                var columns = _columns_of(message.body);
+                if (columns.is_err()) {
+                    # The rest of the reply is unread, so the session is lost.
+                    _open = false;
+                    return PgResult<void>.err(columns.error());
+                }
+                outcome.columns = columns.value();
+                names = _names_of(outcome.columns);
             } else if (type_byte == 'D') {
-                var values = _values_of(message.body, outcome.columns)?;
-                outcome.rows.append(Row(names, values));
+                var values = _values_of(message.body, outcome.columns);
+                if (values.is_err()) {
+                    _open = false;
+                    return PgResult<void>.err(values.error());
+                }
+                outcome.rows.append(Row(names, values.value()));
+            } else if (type_byte == 'G') {
+                # COPY FROM STDIN waits for data this client cannot send.
+                var body = Array<u8>();
+                _put_cstring(body, "COPY FROM STDIN is not supported by this client");
+                var out = _frame('f', body);
+                # A Sync sent before the copy began was ignored, so the
+                # extended protocol needs another; a simple query does not.
+                if (outcome.extended) {
+                    out.append_all(_sync_message());
+                }
+                _write(out)?;
             } else if (type_byte == 'C') {
                 outcome.affected = _affected_of(_Fields(message.body).cstring());
             }

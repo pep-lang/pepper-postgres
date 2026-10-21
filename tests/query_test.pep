@@ -160,3 +160,16 @@ listen_and_notify() {
     expect_equal(notification.payload, "hello");
     expect_equal(listener.notifications().count, 0 as ulong);
 }
+
+[Test]
+copy_from_stdin_fails_instead_of_hanging() {
+    var connection = _connect();
+    if (connection.is_empty()) {
+        return;
+    }
+    var db = connection.value();
+    db.execute_script("CREATE TEMP TABLE copied (x int)").value();
+    expect_equal(db.execute_script("COPY copied FROM STDIN").error().code, "57014");
+    expect_equal(db.execute("COPY copied FROM STDIN").error().code, "57014");
+    expect_equal(db.query("SELECT 3").value()[0].get(0).to_string(), "3");
+}

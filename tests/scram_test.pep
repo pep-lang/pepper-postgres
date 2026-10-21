@@ -13,3 +13,13 @@ rfc_7677_example() {
     expect_true(scram.verify("v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=").is_ok());
     expect_true(scram.verify("v=AAAATRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=").is_err());
 }
+
+[Test]
+bad_server_first_messages_are_rejected() {
+    var salt = "s=W22ZaJ0SNY7soEsUEjb6gQ==";
+    expect_equal(_Scram("u", "p", "abc").final("r=xyz123," + salt + ",i=4096").error().code, "28000");
+    expect_equal(_Scram("u", "p", "abc").final("r=abc," + salt + ",i=4096").error().code, "28000");
+    expect_equal(_Scram("u", "p", "abc").final("r=abcdef," + salt + ",i=0").error().code, "28000");
+    expect_equal(_Scram("u", "p", "abc").final("r=abcdef,i=4096").error().code, "28000");
+    expect_equal(_Scram("u", "p", "abc").verify("e=invalid-proof").error().code, "28000");
+}

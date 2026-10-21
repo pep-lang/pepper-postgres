@@ -70,7 +70,10 @@ export struct Pool {
         assert(size > 0, "postgres: a pool needs at least one connection");
         var idle = async.Channel<async.Mutex<Connection>>();
         for (var i in 0..size) {
-            var connection = Connection.connect(config)?;
+            # A copy per connection: a connection may keep references to its
+            # config's strings, and nothing else may share a value moved
+            # into a lock.
+            var connection = Connection.connect(copy(config))?;
             idle.send(async.Mutex<Connection>(move(connection)));
         }
         return PgResult<Pool>.ok(Pool(idle, size));
