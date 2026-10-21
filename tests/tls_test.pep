@@ -1,5 +1,6 @@
 import os;
 import postgres;
+import tls;
 import "support";
 
 # The CA that signed the test server's certificate, from PEPPER_POSTGRES_CA
@@ -12,6 +13,14 @@ _ca(): String? {
     return path;
 }
 
+# The first connector loads the TLS library (OpenSSL on Linux and macOS),
+# which stays loaded; keep that out of the leak check.
+_load_tls() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+}
+
 [Test]
 tls_connects_and_verifies() {
     var server = _server();
@@ -19,6 +28,7 @@ tls_connects_and_verifies() {
     if (server.is_empty() || ca.is_empty()) {
         return;
     }
+    _load_tls();
     var config = server.value();
     config.tls = true;
     config.root_certificate = ca;
@@ -34,6 +44,7 @@ tls_rejects_an_untrusted_certificate() {
     if (server.is_empty() || _ca().is_empty()) {
         return;
     }
+    _load_tls();
     var config = server.value();
     config.tls = true;
     expect_equal(postgres.Connection.connect(config).error().code, "08006");
