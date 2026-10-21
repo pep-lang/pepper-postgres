@@ -95,7 +95,9 @@ export struct Connection {
     var _status: char;
     var _open: bool;
     var _parameters: Map<String, String>;
-    var _notifications: Notification[];
+    var _notifications: Deque<Notification>;
+    var _max_notifications: ulong;
+    var _dropped_notifications: ulong;
     var _statement_count: ulong;
 
     ## Wraps a connected socket; use `connect` instead.
@@ -109,7 +111,9 @@ export struct Connection {
         _status = 'I';
         _open = true;
         _parameters = Map<String, String>();
-        _notifications = Array<Notification>();
+        _notifications = Deque<Notification>();
+        _max_notifications = _DEFAULT_MAX_NOTIFICATIONS;
+        _dropped_notifications = 0;
         _statement_count = 0;
     }
 
@@ -133,6 +137,7 @@ export struct Connection {
             return PgResult<Connection>.err(_io_error(tcp.error()));
         }
         var connection = Connection(tcp.value());
+        connection._max_notifications = config.max_notifications > 0 ? config.max_notifications : 1;
         if (config.tls) {
             connection._start_tls(config)?;
         }
@@ -415,15 +420,29 @@ export struct Connection {
     ## Returns the notifications that have arrived, oldest first, and
     ## forgets them. They arrive while the connection reads from the
     ## server, so this returns those that came with earlier queries;
-    ## `wait_for_notification` waits for one. A connection that listens
-    ## keeps every notification until this is called, so call it often, or
-    ## `UNLISTEN *` when done.
+    ## `wait_for_notification` waits for one. A connection keeps at most
+    ## `Config.max_notifications` of them (10,000 by default): past that,
+    ## each new one drops the oldest, which `dropped_notifications()`
+    ## counts.
     ##
     ## @returns the notifications, possibly none
     notifications(): Notification[] {
-        var arrived = _notifications;
-        _notifications = Array<Notification>();
+        var arrived = Array<Notification>();
+        for (var notification in _notifications) {
+            arrived.append(notification);
+        }
+        _notifications.clear();
         return arrived;
+    }
+
+    ## Returns how many notifications this connection has dropped, since it
+    ## connected, because `Config.max_notifications` were already waiting.
+    ## A count that grows means `notifications()` is not called often
+    ## enough.
+    ##
+    ## @returns the number dropped
+    dropped_notifications(): ulong {
+        return _dropped_notifications;
     }
 
     ## Waits until a notification arrives on a channel this connection
@@ -438,7 +457,7 @@ export struct Connection {
                 return PgResult<Notification>.err(_error_of(message.body));
             }
         }
-        return PgResult<Notification>.ok(_notifications.remove_at(0));
+        return PgResult<Notification>.ok(_notifications.pop_front());
     }
 
     _run_unnamed(sql: String, parameters: Value[]): PgResult<_Outcome> {
@@ -548,7 +567,11 @@ export struct Connection {
                 var fields = _Fields(body);
                 var process_id = fields.int32();
                 var channel = fields.cstring();
-                _notifications.append(Notification(process_id, channel, fields.cstring()));
+                if (_notifications.count == _max_notifications) {
+                    _notifications.pop_front();
+                    _dropped_notifications += 1;
+                }
+                _notifications.push_back(Notification(process_id, channel, fields.cstring()));
                 # Returned too, so `wait_for_notification` sees it arrive.
                 return PgResult<_Backend>.ok(_Backend(type_byte, body));
             } else if (type_byte != 'N') {
