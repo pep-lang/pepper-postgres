@@ -51,3 +51,10 @@ a_lease_rolls_back_what_it_left_open() {
         }
     }
 }
+
+# Nothing listens on port 1, so the first connection fails.
+[Test]
+open_returns_the_connect_error() {
+    var config = postgres.Config.parse("postgres://u:p@127.0.0.1:1/db").value();
+    expect_equal(postgres.Pool.open(config, 2).error().code, "08006");
+}

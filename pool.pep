@@ -73,7 +73,14 @@ export struct Pool {
             # A copy per connection: a connection may keep references to its
             # config's strings, and nothing else may share a value moved
             # into a lock.
-            var connection = Connection.connect(copy(config))?;
+            # shortcut: 0.11.0 refuses to move a local that `?` declared
+            # (pep-lang/pepper#266); go back to `connect(...)?` once the
+            # minimum toolchain has #267.
+            var connected = Connection.connect(copy(config));
+            if (connected.is_err()) {
+                return PgResult<Pool>.err(connected.error());
+            }
+            var connection = move(connected).value();
             idle.send(async.Mutex<Connection>(move(connection)));
         }
         return PgResult<Pool>.ok(Pool(idle, size));
