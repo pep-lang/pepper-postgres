@@ -46,7 +46,7 @@ struct _Scram {
         if (salt_bytes.is_err() || count.is_empty() || count.value() < 1) {
             return PgResult<String>.err(_auth_error("malformed SCRAM salt or iteration count"));
         }
-        var salted = _pbkdf2_sha256(_password, salt_bytes.value(), count.value() as ulong);
+        var salted = digest.pbkdf2_sha256(_password.bytes(), salt_bytes.value(), count.value() as ulong, 32);
         var client_key = digest.hmac_sha256(salted, "Client Key".bytes());
         var without_proof = "c=biws,r=" + nonce.value();
         var message = (_first_bare + "," + server_first + "," + without_proof).bytes();
@@ -90,26 +90,6 @@ _attribute(message: String, name: String): String? {
 # A user name as SCRAM writes it: `,` and `=` escaped (RFC 5802 5.1).
 _sasl_name(user: String): String {
     return user.replace("=", "=3D").replace(",", "=2C");
-}
-
-# PBKDF2 (RFC 8018) with HMAC-SHA-256, one 32-byte block: SCRAM's Hi().
-# shortcut: a private copy until the runtime's digest has pbkdf2_sha256
-# (pep-lang/pepper#69); switch to it then.
-_pbkdf2_sha256(password: String, salt: u8[], rounds: ulong): u8[] {
-    var mac = digest.Hmac<digest.Sha256>(password);
-    var block = salt.copy();
-    block.append_all([0 as u8, 0 as u8, 0 as u8, 1 as u8]);
-    mac.update(block);
-    var u = mac.finish();
-    var result = u.copy();
-    for (var round in 1..rounds) {
-        mac.update(u);
-        u = mac.finish();
-        for (var i in 0..result.count) {
-            result[i] = result[i] ^ u[i];
-        }
-    }
-    return result;
 }
 
 # A fresh client nonce: 18 random bytes, base64 (printable, no `,`).
