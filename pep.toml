@@ -4,5 +4,6 @@ version = "1.0.1"
 description = "An async PostgreSQL client: wire protocol v3 in pure Pepper, TLS, SCRAM-SHA-256, parameterized queries, typed rows, transactions, LISTEN/NOTIFY and a pool"
 license = "Apache-2.0"
 repository = "https://github.com/pep-lang/pepper-postgres"
-# 0.11 added digest.pbkdf2_sha256, which SCRAM uses.
-minimum_toolchain = "0.11.0"
+# 0.11 added digest.pbkdf2_sha256, which SCRAM uses; 0.11.1 lets
+# `Pool.open` move a value `?` unwrapped (pep-lang/pepper#266).
+minimum_toolchain = "0.11.1"
